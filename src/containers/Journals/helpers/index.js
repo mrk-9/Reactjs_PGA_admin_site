@@ -1,0 +1,1 @@
+export { journalColumn } from './columns'

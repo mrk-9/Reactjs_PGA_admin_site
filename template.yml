@@ -1,0 +1,76 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: PGA Admin Template
+
+Parameters:
+  BucketName:
+    Type: String
+  CloudfrontDefaultTTL:
+    Type: Number
+    Description: The default time in seconds that objects stay in CloudFront cache.
+    Default: 0
+
+Resources:
+  FrontendRecord:
+    Type: 'AWS::Route53::RecordSet'
+    DependsOn: FrontendCloudfront
+    Properties:
+      AliasTarget:
+        DNSName: !GetAtt FrontendCloudfront.DomainName
+        HostedZoneId: Z2FDTNDATAQYW2
+      HostedZoneId: !ImportValue PGA-ORG-HOSTED-ZONE
+      Name:
+        Fn::Sub:
+          - admin.${Domain}
+          - Domain:
+              Fn::ImportValue: PGA-ORG-HOSTED-NAME
+      Type: A
+
+  FrontendCloudfront:
+    Type: 'AWS::CloudFront::Distribution'
+    DependsOn: FrontendBucket
+    Properties:
+      DistributionConfig:
+        Aliases:
+        - Fn::Sub:
+            - admin.${Domain}
+            - Domain:
+                Fn::ImportValue: PGA-ORG-HOSTED-NAME
+        DefaultCacheBehavior:
+          AllowedMethods:
+          - GET
+          - HEAD
+          TargetOriginId: !Ref FrontendBucket
+          DefaultTTL: !Ref CloudfrontDefaultTTL
+          Compress: 'true'
+          ForwardedValues:
+            QueryString: 'true'
+            Cookies:
+              Forward: none
+          ViewerProtocolPolicy: redirect-to-https
+        DefaultRootObject: index.html
+        Enabled: 'true'
+        Origins:
+        - CustomOriginConfig:
+            OriginProtocolPolicy: http-only
+          DomainName: !Sub ${BucketName}.s3-website-${AWS::Region}.amazonaws.com
+          Id: !Ref FrontendBucket
+        ViewerCertificate:
+          AcmCertificateArn: !ImportValue PGA-ORG-CERT
+          SslSupportMethod: sni-only
+
+  FrontendBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Ref BucketName
+      AccessControl: PublicRead
+      WebsiteConfiguration:
+        IndexDocument: index.html
+        ErrorDocument: index.html
+
+Outputs:
+  WebsiteURL:
+    Description: URL for Admin PGA
+    Value: !GetAtt FrontendBucket.WebsiteURL
+    Export:
+      Name: ADMIN-PGA-ORG-URL
